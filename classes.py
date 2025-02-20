@@ -54,6 +54,9 @@ class Transition:
         self.trans_type = trans_type
 
     def calc_huangrhys(self):
+        dQ2 = (self.state_i.eq_Q - self.state_f.eq_Q)**2 * (au_to_kg)*1e-20
+        w = np.mean([self.state_f.freq, self.state_i.freq])/(hbar*J_to_hartree)
+        return dQ2*w/(2*hbar)
 
 
     def gen_linear_coupling(self, q_vals):

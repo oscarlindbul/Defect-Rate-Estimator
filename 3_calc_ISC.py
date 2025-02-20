@@ -115,7 +115,8 @@ def make_coupling_plot(filename, ylabel, plot_labels, scaling=1):
 def calculate_transition_rates(filename, data_filename, n_refr = None, maximize=False, neval=int(1e6), plot=False):
     data_file = open(data_filename, "w")
     for trans in read_transitions(filename):
-    
+        print("huang-rhys")
+        print(trans.calc_huangrhys())
         # find optimal delta spread
         def func_eval(spread):
             rate,_,_,_ = trans.calc_rate(spread=spread, nmax=10, n_refr=n_refr)
