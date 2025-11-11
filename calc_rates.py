@@ -6,6 +6,28 @@ from colorsys import rgb_to_hls, hls_to_rgb
 from mpl_toolkits.axisartist.axislines import AxesZero
 
 def read_transitions(filename):
+    """Generate Transition data object from space-separated tabular text file, with columns:
+
+    (Transition type, ISC, IC, PL)
+    (State Label 1)
+    (State Label 2)
+    (Q Coord. 1) in amu^1/2 A
+    (Q Coord. 2) in amu^1/2 A
+    (Gr Energy at Q1) in Hartree
+    (Gr Energy at Q2) in Hartree
+    (Ex Energy at Q1) in Hartree
+    (Ex Energy at Q2) in Hartree
+    (Gr Effective phonon freq.) in Hz
+    (Ex Effective phonon freq.) in Hz
+    (Coupling term 1) in appropriate units, (ISC: per cm, IC: 1, PL: a.u. dipole moment squared)
+    (Coupling term 2) ...
+
+    Args:
+        filename (str): File containing tabular data
+
+    Yields:
+        transitions (Transition): Transition objects corresponding to tabular data
+    """
     print(f"Reading datafile {filename}")
     with open(filename, "r") as reader:
         lines = reader.readlines()
@@ -15,29 +37,29 @@ def read_transitions(filename):
         data = line.strip().split()
         trans_type = data[0]
         labels = data[1:3]
-        Qs = list(map(float, data[3:5]))
-        state1_E = list(map(float,data[5:7]))
-        state2_E = list(map(float, data[7:9]))
-        freqs = np.array(list(map(float, data[9:11]))) * hbar * J_to_hartree # in hartree
+        Qs = list(map(float, data[3:5])) # in amu^1/2 A
+        state1_E = list(map(float,data[5:7])) # in Hartree
+        state2_E = list(map(float, data[7:9])) # in Hartree
+        freqs = np.array(list(map(float, data[9:11]))) * hbar * J_to_hartree # in hartree, Hz * hbar -> J, * J_to_hartree -> hartree
         couplings = np.array(list(map(float, data[11:])))
+        
         print(f"Reading couplings for transition of type {trans_type}")
         if trans_type == "ISC":
-            couplings *= 100*c*h*J_to_hartree # hartrees
-            print(f"{couplings} Hartree")
+            couplings *= 100*c*h*J_to_hartree # per cm to hartrees
+            print(f"Couplings: {couplings} Hartree")
         elif trans_type == "IC":
-            couplings *= 1 # electron overlap has unit 1?
-            print(f"{couplings} [1]")
+            couplings *= 1 # electron overlap has unit 1
+            print(f"Couplings: {couplings} [1]")
             print(Qs, labels, trans_type)
             print(state1_E)
             print(state2_E)
             print(couplings)
         elif trans_type == "PL":
             couplings = np.sqrt(couplings)
-            couplings *= au_to_debye # dipole moments in Debye
-            print(f"{couplings} Debye")
+            couplings *= au_to_debye # dipole moments in Debye, from atomic units (missing electron charge)
+            print(f"Couplings: {couplings} Debye")
         else:
-            print("Unknown coupling type")
-            exit()
+            raise Exception("Unknown coupling type", trans_type)
         if len(couplings) % 2:
             print("Wrong number of coupling terms in file")
             return None
@@ -50,6 +72,13 @@ def read_transitions(filename):
         yield transition
 
 def make_level_plot(filename, included_modes=4):
+    """Creates a Q-E plot for the states included in the given tabular file, together with a given amount of vibrational modes placed at corresponding energy levels.
+        See "read_transitions" for file format.
+
+    Args:
+        filename (str): File containing tabular data
+        included_modes (int, optional): Number of vibrational modes to include in the plot. Defaults to 4.
+    """
     ground_color = rgb_to_hls(*mc.to_rgb("blue"))
     ex_color = rgb_to_hls(*mc.to_rgb("orange"))
     transitions = list(read_transitions(filename))
@@ -84,6 +113,15 @@ def make_level_plot(filename, included_modes=4):
         fig.clf()
 
 def make_coupling_plot(filename, ylabel, plot_labels, scaling=1):
+    """Creates a linear interpolation plot of the provided couplings in tabular data file. Mainly visual debugging tool.
+    Also saves the plot as a PDF file.
+
+    Args:
+        filename (str): File containing tabular data. See format under "read_transitions".
+        ylabel (str): Label for the y-axis
+        plot_labels (list of str): Labels for each coupling graph
+        scaling (float, optional): Scaling factor for the couplings. Defaults to 1.
+    """
     transitions = list(read_transitions(filename))
     for trans in transitions:
         fig = plt.figure()
@@ -113,10 +151,25 @@ def make_coupling_plot(filename, ylabel, plot_labels, scaling=1):
         fig.clf()
 
 def calculate_transition_rates(filename, data_filename, n_refr = None, maximize=False, neval=int(1e6), plot=False):
+    """Takes a tabular data file and calculates the ISC, IC or PL rates for each transition included.
+    Saves the results to a text file.
+
+    Will output the partial rates for each vibrational mode as well as the total rate.
+    Total rate reported together with values obtained at error margins in the transition energy (typically 0.1 eV).
+
+    Args:
+        filename (str): Tabular data file. See "read_transitions" for format.
+        data_filename (str): File to save the calculated rates.
+        n_refr (int, optional): Refractive index of material. Defaults to None, as only needed for PL rates.
+        maximize (bool, optional): Whether to maximize the rate by optimizing delta spread. Defaults to False.
+        neval (int, optional): Number of evaluations for numerical integration. Defaults to 1e6.
+        plot (bool, optional): Whether to generate plots. Defaults to False.
+    """
     data_file = open(data_filename, "w")
     for trans in read_transitions(filename):
-        print("huang-rhys")
-        print(trans.calc_huangrhys())
+        print(f"Calculating rate for transition {trans.state_i.label} to {trans.state_f.label} of type {trans.trans_type}")
+        #print("huang-rhys")
+        #print(trans.calc_huangrhys())
         # find optimal delta spread
         def func_eval(spread):
             rate,_,_,_ = trans.calc_rate(spread=spread, nmax=10, n_refr=n_refr)
@@ -131,7 +184,7 @@ def calculate_transition_rates(filename, data_filename, n_refr = None, maximize=
             max_point = scipy.optimize.fmin(func_eval, initial_guess, disp=False)
             optimal_spread = max_point[0]
         else:
-            optimal_spread = trans.state_f.freq*2/2.355
+            optimal_spread = trans.state_f.freq*2/2.355 # decent choice for Gaussian delta approximation
         if optimal_spread > 1 or optimal_spread < 1e-6:
             print(f"Optimal delta width {optimal_spread} Hartree too big")
             optimal_spread = 1e-3
@@ -145,8 +198,11 @@ def calculate_transition_rates(filename, data_filename, n_refr = None, maximize=
         partial_rates = np.zeros(partial_spectras.shape[:2])
         if trans.trans_type == "PL":
             for i in range(partial_rates.shape[0]):
+                print(f"Transition {trans.state_i.label} to {trans.state_f.label} with couplings {trans.couplings[i,:]}", file=data_file)
                 for j in range(partial_rates.shape[1]):
                     partial_rates[i,j] = integrate.simpson(partial_spectras[i,j, energies >= 0], x = energies[energies >= 0])
+                    print(f"n={j}   {partial_rates[i,j]}", file=data_file)
+                print(f"Total rate {rate[i]} Hz", file=data_file)
         else:
             partial_rates_mid = partial_spectras[:,:,closest_to_zero_mid]
             partial_rates_small = partial_spectras[:,:,closest_to_zero_small]
@@ -158,20 +214,22 @@ def calculate_transition_rates(filename, data_filename, n_refr = None, maximize=
                 print(f"Transition {trans.state_i.label} to {trans.state_f.label} with couplings {trans.couplings[i,:]}", file=data_file)
                 for j in range(partial_rates.shape[1]):
                     print(f"n={j}   {partial_rates_mid[i,j]} {partial_rates_small[i,j]} {partial_rates_big[i,j]}", file=data_file)
-                print(f"Total rate {rate[i]}, {small_rate[i]} {big_rate[i]} Hz", file=data_file)
+                print(f"Total rate {rate[i]}, small: {small_rate[i]}, big:{big_rate[i]} Hz", file=data_file)
         print(rate)
             
-        plt.plot(energies, spectrum[0])
-        for i in range(partial_spectras.shape[1]):
-            plt.plot(energies, partial_spectras[0,i,:])
-        plt.show()
+        #plt.plot(energies, spectrum[0])
+        #for i in range(partial_spectras.shape[1]):
+        #    plt.plot(energies, partial_spectras[0,i,:])
+        #plt.show()
     data_file.close()
 
 
 if __name__ == "__main__":
     #make_level_plot("ICs.txt", included_modes=10)
     #make_coupling_plot("ICs.txt", "El-phonon Coupling ($W$)", ["W"])
-    calculate_transition_rates("ICs.txt", "IC_data.txt", n_refr = 2.42, neval=int(1e6), plot=True) 
+    calculate_transition_rates("PLs.txt", "PL_data.txt", n_refr = 2.42, neval=int(1e6), plot=False) 
+    #calculate_transition_rates("ISCs.txt", "ISC_data.txt", n_refr = 2.42, neval=int(1e6), plot=False) 
+    #calculate_transition_rates("ICs.txt", "IC_data.txt", n_refr = 2.42, neval=int(1e6), plot=False)
 
 
         
