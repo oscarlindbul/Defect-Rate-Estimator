@@ -2,6 +2,8 @@
 
 This repo provides rudimentary scripts and functions to calculate overlap between phonon wavefunctions and use it to estimate transition rates in non-radiative and inter-system crossing transitions.
 
+Methods are based on the use of the single-phonon approximation in transitions between to state structures.
+
 The repo consists of loose python files, meant to be run in the same folder, with:
 - constants.py
   - Definition of physical constants and conversion factors for the physical units of these methods.
