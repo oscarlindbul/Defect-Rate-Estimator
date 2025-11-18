@@ -1,1 +1,12 @@
 # Defect-Rate-Estimator
+
+This repo provides rudimentary scripts and functions to calculate overlap between phonon wavefunctions and use it to estimate transition rates in non-radiative and inter-system crossing transitions.
+
+The repo consists of loose python files, meant to be run in the same folder, with:
+    - constants.py
+        Definition of physical constants and conversion factors for the physical units of these methods.
+    - classes.py
+        Defines a State and Transition class containing the functionality to store relevant information and compute rates and other useful properties
+
+    - calc_rates.py
+        Provides functionalities for reading example data table files and calculate the corresponding rates. Meant to be the executable script of this workflow. 
